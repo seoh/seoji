@@ -4,6 +4,7 @@
  * API 에 입력일 필터가 없으므로 입력일 내림차순으로 페이지를 넘기며 대상 날짜를 모으고,
  * 대상 날짜보다 이전 입력일이 나오면 멈춘다.
  */
+import { parseAddCode, subjectName } from "./addcode.js";
 
 const PAGE_SIZE = 100;
 // Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회를 남긴다
@@ -12,8 +13,8 @@ export const MAX_NL_REQUESTS = 47;
 const COLUMNS = [
   "TITLE", "AUTHOR", "TRANSLATOR", "PUBLISHER", "EA_ISBN", "PRE_PRICE",
   "PAGE", "FORM", "PUBLISH_PREDATE", "INPUT_DATE",
-  // 기존 파일과 앞쪽 컬럼 위치가 같도록 뒤에 붙인다
-  "EA_ADD_CODE", "KDC", "DDC", "SUBJECT", "TITLE_URL",
+  // 기존 파일과 앞쪽 컬럼 위치가 같도록 뒤에 붙인다. KDC·DDC 는 신규 입력 도서에서 항상 비어 있어 뺐다
+  "EA_ADD_CODE", "ADD_READER", "ADD_FORM", "ADD_CONTENT", "SUBJECT", "TITLE_URL",
 ];
 
 // 자정에 실행되므로 대상은 방금 끝난 날(한국 시간 기준 어제). cron 이 늦게 돌 수 있어 예약 시각 기준
@@ -90,7 +91,11 @@ export async function collect(env, target) {
       const date = String(d.INPUT_DATE ?? "").trim();
       if (date === target) {
         const key = d.EA_ISBN || JSON.stringify(d);
-        if (!found.has(key)) found.set(key, { ...d, ...splitAuthor(d.AUTHOR) });
+        if (!found.has(key)) {
+          found.set(key, {
+            ...d, ...splitAuthor(d.AUTHOR), ...parseAddCode(d.EA_ADD_CODE), SUBJECT: subjectName(d.SUBJECT),
+          });
+        }
       } else if (date && date < target) {
         reachedOlder = true;  // 빈 입력일은 정렬 위치를 알 수 없어 멈춤 조건으로 쓰지 않는다
       }

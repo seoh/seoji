@@ -37,10 +37,10 @@ const book = (date) => {
     FORM: "종이책",
     PUBLISH_PREDATE: "20261101",
     INPUT_DATE: date,
-    EA_ADD_CODE: "03810",
-    KDC: n % 3 === 0 ? "" : "813.7",
-    DDC: n % 3 === 0 ? "" : "895.735",
-    SUBJECT: "문학",
+    EA_ADD_CODE: ["03810", "05320", "79990", "", "2381"][n % 5],  // 마지막 셋: 표에 없는 값, 빈 값, 자릿수 오류
+    KDC: "",
+    DDC: "",
+    SUBJECT: ["8", "3", "9", "", "8"][n % 5],
     TITLE_URL: `https://example.com/cover/${n}.jpg`,
   };
 };
