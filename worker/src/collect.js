@@ -12,6 +12,8 @@ export const MAX_NL_REQUESTS = 47;
 const COLUMNS = [
   "TITLE", "AUTHOR", "TRANSLATOR", "PUBLISHER", "EA_ISBN", "PRE_PRICE",
   "PAGE", "FORM", "PUBLISH_PREDATE", "INPUT_DATE",
+  // 기존 파일과 앞쪽 컬럼 위치가 같도록 뒤에 붙인다
+  "EA_ADD_CODE", "KDC", "DDC", "SUBJECT", "TITLE_URL",
 ];
 
 // 자정에 실행되므로 대상은 방금 끝난 날(한국 시간 기준 어제). cron 이 늦게 돌 수 있어 예약 시각 기준
