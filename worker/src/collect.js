@@ -21,6 +21,8 @@ export function kstYesterday(scheduledTime) {
 
 // AUTHOR에서 역자 분리: "역자 : X", "옮긴이: X", "X 옮김", "X 역" 형태
 const TRANSLATOR_RE = /^(?:역자|옮긴이|번역|역)\s*:\s*|\s+(?:옮김|번역|역)$/;
+// "저자 : X" 의 접두어만 지운다. "AI 저자 :", "낭독자 :" 등 다른 역할은 남긴다
+const AUTHOR_PREFIX_RE = /^저자\s*:\s*/;
 
 function splitAuthor(value) {
   const parts = String(value ?? "")
@@ -29,7 +31,8 @@ function splitAuthor(value) {
     .filter(Boolean);
   const authors = [], translators = [];
   for (const p of parts) {
-    (TRANSLATOR_RE.test(p) ? translators : authors).push(p.replace(TRANSLATOR_RE, "").trim());
+    if (TRANSLATOR_RE.test(p)) translators.push(p.replace(TRANSLATOR_RE, "").trim());
+    else authors.push(p.replace(AUTHOR_PREFIX_RE, "").trim());
   }
   return { AUTHOR: authors.join("; "), TRANSLATOR: translators.join("; ") };
 }
