@@ -1,0 +1,6 @@
+# cp .dev.vars.example .dev.vars — 로컬 테스트용. 가짜 API(npm run mock)를 가리킨다
+NL_CERT_KEY=test-key
+GITHUB_TOKEN=test-token
+RUN_TOKEN=test-run
+NL_API_URL=http://127.0.0.1:8790/api
+GITHUB_API_URL=http://127.0.0.1:8790/gh

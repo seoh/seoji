@@ -1,0 +1,21 @@
+name = "seoji"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Cloudflare cron 은 UTC 기준. 15:15 UTC = 00:15 KST
+[triggers]
+crons = ["15 15 * * *"]
+
+# Workers Logs: 대시보드에서 실행 결과·console 로그 확인. Free 는 하루 200,000건, 3일 보관
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# 로컬에서는 .dev.vars 가 이 값을 덮어쓴다 (가짜 API 주소 등)
+[vars]
+GITHUB_REPO = "seoh/seoji"
+GITHUB_BRANCH = "main"
+NL_API_URL = "https://www.nl.go.kr/seoji/SearchApi.do"
+GITHUB_API_URL = "https://api.github.com"
+
+# 시크릿 (wrangler secret put): NL_CERT_KEY, GITHUB_TOKEN, RUN_TOKEN
