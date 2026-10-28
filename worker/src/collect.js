@@ -17,7 +17,7 @@ const COLUMNS = [
   "EA_ADD_CODE", "ADD_READER", "ADD_FORM", "ADD_CONTENT", "SUBJECT", "TITLE_URL",
 ];
 
-// 자정에 실행되므로 대상은 방금 끝난 날(한국 시간 기준 어제). cron 이 늦게 돌 수 있어 예약 시각 기준
+// 대상은 한국 시간 기준 어제(입력분이 다음 날 일괄 등록됨). cron 이 늦게 돌 수 있어 예약 시각 기준
 export function kstYesterday(scheduledTime) {
   return new Date(scheduledTime + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10).replaceAll("-", "");
 }

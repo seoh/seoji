@@ -2,9 +2,10 @@ name = "seoji"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
 
-# Cloudflare cron 은 UTC 기준. 15:15 UTC = 00:15 KST
+# Cloudflare cron 은 UTC 기준. 00:15 UTC = 09:15 KST
+# 그날 입력분은 다음 날 일괄 등록되므로(10-27 분: 다음 날 00:15 에 6건, 16:54 에 2,325건) 아침에 받는다
 [triggers]
-crons = ["15 15 * * *"]
+crons = ["15 0 * * *"]
 
 # Workers Logs: 대시보드에서 실행 결과·console 로그 확인. Free 는 하루 200,000건, 3일 보관
 [observability]
