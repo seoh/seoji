@@ -3,7 +3,7 @@ main = "src/index.js"
 compatibility_date = "2026-10-01"
 
 # Cloudflare cron 은 UTC 기준. 00:15 UTC = 09:15 KST
-# 그날 입력분은 다음 날 일괄 등록되므로(10-27 분: 다음 날 00:15 에 6건, 16:54 에 2,325건) 아침에 받는다
+# 그날 입력분은 다음 날 하루에 걸쳐 일괄 등록되므로 그저께 입력분을 받는다 (collect.js kstTargetDate)
 [triggers]
 crons = ["15 0 * * *"]
 

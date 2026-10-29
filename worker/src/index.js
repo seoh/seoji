@@ -1,4 +1,4 @@
-import { collect, kstYesterday, toCsv } from "./collect.js";
+import { collect, kstTargetDate, toCsv } from "./collect.js";
 import { putFile } from "./github.js";
 
 async function run(env, target) {
@@ -15,7 +15,7 @@ async function run(env, target) {
 export default {
   async scheduled(event, env, ctx) {
     // 실패 사유를 로그에 남기고, 다시 던져 실행 결과가 실패로 기록되게 한다
-    ctx.waitUntil(run(env, kstYesterday(event.scheduledTime)).catch((e) => {
+    ctx.waitUntil(run(env, kstTargetDate(event.scheduledTime)).catch((e) => {
       console.error(e.message);
       throw e;
     }));

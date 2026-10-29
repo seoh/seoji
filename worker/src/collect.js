@@ -17,9 +17,11 @@ const COLUMNS = [
   "EA_ADD_CODE", "ADD_READER", "ADD_FORM", "ADD_CONTENT", "SUBJECT", "TITLE_URL",
 ];
 
-// 대상은 한국 시간 기준 어제(입력분이 다음 날 일괄 등록됨). cron 이 늦게 돌 수 있어 예약 시각 기준
-export function kstYesterday(scheduledTime) {
-  return new Date(scheduledTime + 9 * 3600e3 - 86400e3).toISOString().slice(0, 10).replaceAll("-", "");
+// 대상은 한국 시간 기준 그저께. 입력분이 다음 날 하루에 걸쳐 일괄 등록된다
+// (10-28 분: 다음 날 09:15 에 281건, 14:40 에 1,550건 / 10-27 분: 다음 날 16:54 에 2,325건, 그다음 날 2,331건)
+// cron 이 늦게 돌 수 있어 예약 시각 기준
+export function kstTargetDate(scheduledTime) {
+  return new Date(scheduledTime + 9 * 3600e3 - 2 * 86400e3).toISOString().slice(0, 10).replaceAll("-", "");
 }
 
 // AUTHOR에서 역자 분리: "역자 : X", "옮긴이: X", "X 옮김", "X 역" 형태
