@@ -4,17 +4,22 @@
  * API 에 입력일 필터가 없으므로 입력일 내림차순으로 페이지를 넘기며 대상 날짜를 모으고,
  * 대상 날짜보다 이전 입력일이 나오면 멈춘다.
  */
-import { parseAddCode, subjectName } from "./addcode.js";
-
 const PAGE_SIZE = 100;
 // Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회를 남긴다
 export const MAX_NL_REQUESTS = 47;
 
-const COLUMNS = [
+// 나중에 어떻게 쓸지 몰라 API 필드를 전부 그대로 저장한다 (TRANSLATOR 만 AUTHOR 에서 분리해 추가)
+// 파일마다 컬럼이 같도록 순서를 고정한다. 앞 10개는 기존 파일과 같은 위치
+const BASE_COLUMNS = [
   "TITLE", "AUTHOR", "TRANSLATOR", "PUBLISHER", "EA_ISBN", "PRE_PRICE",
   "PAGE", "FORM", "PUBLISH_PREDATE", "INPUT_DATE",
-  // 기존 파일과 앞쪽 컬럼 위치가 같도록 뒤에 붙인다. KDC·DDC 는 신규 입력 도서에서 항상 비어 있어 뺐다
-  "EA_ADD_CODE", "ADD_READER", "ADD_FORM", "ADD_CONTENT", "SUBJECT", "TITLE_URL",
+  "EA_ADD_CODE", "SUBJECT", "TITLE_URL",
+  "KDC", "DDC", "FORM_DETAIL", "EBOOK_YN", "CIP_YN", "BIB_YN", "DEPOSIT_YN",
+  "REAL_PUBLISH_DATE", "REAL_PRICE", "UPDATE_DATE", "CONTROL_NO",
+  "SERIES_TITLE", "SERIES_NO", "EDITION_STMT", "VOL", "BOOK_SIZE",
+  "SET_ISBN", "SET_ADD_CODE", "SET_EXPRESSION", "RELATED_ISBN",
+  "PUBLISHER_URL", "BOOK_TB_CNT", "BOOK_TB_CNT_URL", "BOOK_INTRODUCTION", "BOOK_INTRODUCTION_URL",
+  "BOOK_SUMMARY", "BOOK_SUMMARY_URL",
 ];
 
 // 대상은 한국 시간 기준 그저께. 입력분이 다음 날 하루에 걸쳐 일괄 등록된다
@@ -29,7 +34,7 @@ const TRANSLATOR_RE = /^(?:역자|옮긴이|번역|역)\s*:\s*|\s+(?:옮김|번�
 // "저자 : X" 의 접두어만 지운다. "AI 저자 :", "낭독자 :" 등 다른 역할은 남긴다
 const AUTHOR_PREFIX_RE = /^저자\s*:\s*/;
 
-function splitAuthor(value) {
+export function splitAuthor(value) {
   const parts = String(value ?? "")
     .split(/;|,(?=\s*(?:역자|옮긴이|번역)\s*:)/)
     .map((p) => p.trim())
@@ -42,12 +47,21 @@ function splitAuthor(value) {
   return { AUTHOR: authors.join("; "), TRANSLATOR: translators.join("; ") };
 }
 
+// 응답에 새 필드가 생기면 고정 컬럼 뒤에 이름순으로 붙인다
+function columnsFor(docs) {
+  const extra = new Set();
+  for (const d of docs) for (const k of Object.keys(d)) if (!BASE_COLUMNS.includes(k)) extra.add(k);
+  return [...BASE_COLUMNS, ...[...extra].sort()];
+}
+
+// 값은 손대지 않는다(공백·줄바꿈 그대로). CSV 따옴표 처리만 한다
 export function toCsv(docs) {
   const quote = (v) => {
-    const s = String(v ?? "").replace(/\r\n/g, "\n").trim();
+    const s = String(v ?? "");
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const rows = [COLUMNS, ...docs.map((d) => COLUMNS.map((c) => d[c]))];
+  const columns = columnsFor(docs);
+  const rows = [columns, ...docs.map((d) => columns.map((c) => d[c]))];
   return "﻿" + rows.map((r) => r.map(quote).join(",")).join("\n") + "\n";  // 엑셀에서 한글이 깨지지 않도록 BOM
 }
 
@@ -94,9 +108,7 @@ export async function collect(env, target) {
       if (date === target) {
         const key = d.EA_ISBN || JSON.stringify(d);
         if (!found.has(key)) {
-          found.set(key, {
-            ...d, ...splitAuthor(d.AUTHOR), ...parseAddCode(d.EA_ADD_CODE), SUBJECT: subjectName(d.SUBJECT),
-          });
+          found.set(key, { ...d, ...splitAuthor(d.AUTHOR) });
         }
       } else if (date && date < target) {
         reachedOlder = true;  // 빈 입력일은 정렬 위치를 알 수 없어 멈춤 조건으로 쓰지 않는다
