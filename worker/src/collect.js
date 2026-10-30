@@ -8,7 +8,9 @@ const PAGE_SIZE = 100;
 // Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회를 남긴다
 export const MAX_NL_REQUESTS = 47;
 
-// 나중에 어떻게 쓸지 몰라 API 필드를 전부 그대로 저장한다 (TRANSLATOR 만 AUTHOR 에서 분리해 추가)
+// 나중에 어떻게 쓸지 몰라 API 필드를 그대로 저장한다 (TRANSLATOR 만 AUTHOR 에서 분리해 추가)
+// 목차·책소개·요약은 전체 용량의 80% 를 차지해 뺀다. 각 _URL 필드는 남긴다
+const EXCLUDED_COLUMNS = ["BOOK_TB_CNT", "BOOK_INTRODUCTION", "BOOK_SUMMARY"];
 // 파일마다 컬럼이 같도록 순서를 고정한다. 앞 10개는 기존 파일과 같은 위치
 const BASE_COLUMNS = [
   "TITLE", "AUTHOR", "TRANSLATOR", "PUBLISHER", "EA_ISBN", "PRE_PRICE",
@@ -18,8 +20,7 @@ const BASE_COLUMNS = [
   "REAL_PUBLISH_DATE", "REAL_PRICE", "UPDATE_DATE", "CONTROL_NO",
   "SERIES_TITLE", "SERIES_NO", "EDITION_STMT", "VOL", "BOOK_SIZE",
   "SET_ISBN", "SET_ADD_CODE", "SET_EXPRESSION", "RELATED_ISBN",
-  "PUBLISHER_URL", "BOOK_TB_CNT", "BOOK_TB_CNT_URL", "BOOK_INTRODUCTION", "BOOK_INTRODUCTION_URL",
-  "BOOK_SUMMARY", "BOOK_SUMMARY_URL",
+  "PUBLISHER_URL", "BOOK_TB_CNT_URL", "BOOK_INTRODUCTION_URL", "BOOK_SUMMARY_URL",
 ];
 
 // 대상은 한국 시간 기준 그저께. 입력분이 다음 날 하루에 걸쳐 일괄 등록된다
@@ -50,7 +51,9 @@ export function splitAuthor(value) {
 // 응답에 새 필드가 생기면 고정 컬럼 뒤에 이름순으로 붙인다
 function columnsFor(docs) {
   const extra = new Set();
-  for (const d of docs) for (const k of Object.keys(d)) if (!BASE_COLUMNS.includes(k)) extra.add(k);
+  for (const d of docs) for (const k of Object.keys(d)) {
+    if (!BASE_COLUMNS.includes(k) && !EXCLUDED_COLUMNS.includes(k)) extra.add(k);
+  }
   return [...BASE_COLUMNS, ...[...extra].sort()];
 }
 
