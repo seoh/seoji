@@ -11,8 +11,10 @@ async function run(env, target, { notify = false } = {}) {
   const summary = `${target}: ${docs.length}건 → ${path} (${pages}쪽, 요청 ${requests}회)`;
   console.log(summary);
   // 파일은 이미 저장됐다. 알림이 실패하면 실행 결과만 실패로 남는다
-  if (notify) console.log(await notifyPublishers(env, target, docs));
-  return summary;
+  if (!notify) return summary;
+  const result = await notifyPublishers(env, target, docs);
+  console.log(result);
+  return `${summary}, ${result}`;
 }
 
 export default {
@@ -24,16 +26,17 @@ export default {
     }));
   },
 
-  // 지난 날짜 채우기: GET /?date=yyyymmdd, Authorization: Bearer <RUN_TOKEN>
+  // 지난 날짜 채우기: GET /?date=yyyymmdd, Authorization: Bearer <RUN_TOKEN>. &notify=1 이면 알림도 보낸다
   // RUN_TOKEN 이 없으면 막는다. 열어 두면 누구나 호출해 API 쿼터를 쓸 수 있음
   async fetch(request, env) {
     if (!env.RUN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUN_TOKEN}`) {
       return new Response("forbidden\n", { status: 403 });
     }
-    const date = new URL(request.url).searchParams.get("date") ?? "";
+    const params = new URL(request.url).searchParams;
+    const date = params.get("date") ?? "";
     if (!/^\d{8}$/.test(date)) return new Response("date=yyyymmdd 필요\n", { status: 400 });
     try {
-      return new Response((await run(env, date)) + "\n");
+      return new Response((await run(env, date, { notify: params.get("notify") === "1" })) + "\n");
     } catch (e) {
       console.error(e.message);
       return new Response(`실패: ${e.message}\n`, { status: 500 });
