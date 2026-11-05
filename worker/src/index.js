@@ -1,7 +1,8 @@
 import { collect, kstTargetDate, toCsv } from "./collect.js";
 import { putFile } from "./github.js";
+import { notifyPublishers } from "./notify.js";
 
-async function run(env, target) {
+async function run(env, target, { notify = false } = {}) {
   if (!env.NL_CERT_KEY) throw new Error("NL_CERT_KEY 시크릿이 없습니다");
   const { docs, pages, requests } = await collect(env, target);
   const [y, m, d] = [target.slice(0, 4), target.slice(4, 6), target.slice(6, 8)];
@@ -9,13 +10,15 @@ async function run(env, target) {
   await putFile(env, path, toCsv(docs), `data: ${target} 입력 도서 ${docs.length}건`);
   const summary = `${target}: ${docs.length}건 → ${path} (${pages}쪽, 요청 ${requests}회)`;
   console.log(summary);
+  // 파일은 이미 저장됐다. 알림이 실패하면 실행 결과만 실패로 남는다
+  if (notify) console.log(await notifyPublishers(env, target, docs));
   return summary;
 }
 
 export default {
   async scheduled(event, env, ctx) {
     // 실패 사유를 로그에 남기고, 다시 던져 실행 결과가 실패로 기록되게 한다
-    ctx.waitUntil(run(env, kstTargetDate(event.scheduledTime)).catch((e) => {
+    ctx.waitUntil(run(env, kstTargetDate(event.scheduledTime), { notify: true }).catch((e) => {
       console.error(e.message);
       throw e;
     }));

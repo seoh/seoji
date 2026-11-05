@@ -5,7 +5,7 @@
  * 대상 날짜보다 이전 입력일이 나오면 멈춘다.
  */
 const PAGE_SIZE = 100;
-// Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회를 남긴다
+// Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회와 알림 1회를 남긴다
 export const MAX_NL_REQUESTS = 47;
 
 // 나중에 어떻게 쓸지 몰라 API 필드를 그대로 저장한다 (TRANSLATOR 만 AUTHOR 에서 분리해 추가)
