@@ -1,7 +1,7 @@
 name = "seoji"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
-# 공개 저장소라 메일 주소(NOTIFY_TO, NOTIFY_FROM)는 여기 적지 않고 대시보드 변수로 둔다. 배포해도 지워지지 않게 한다
+# 대시보드에서 추가한 변수가 배포로 지워지지 않게 한다
 keep_vars = true
 
 # Cloudflare cron 은 UTC 기준. 00:15 UTC = 09:15 KST
@@ -22,4 +22,4 @@ NL_API_URL = "https://www.nl.go.kr/seoji/SearchApi.do"
 GITHUB_API_URL = "https://api.github.com"
 
 # 시크릿 (wrangler secret put): NL_CERT_KEY, GITHUB_TOKEN, RUN_TOKEN
-# 알림용 (셋 다 있어야 보낸다): 시크릿 RESEND_API_KEY, 대시보드 변수 NOTIFY_TO, NOTIFY_FROM
+# 알림용 시크릿 (셋 다 있어야 보낸다): RESEND_API_KEY, NOTIFY_TO, NOTIFY_FROM. 공개 저장소라 메일 주소는 여기 적지 않는다
