@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 지난 입력일 여러 날을 한 번에 받아 content/ 에 CSV 로 쓴다. 커밋은 직접 한다.
+ * 지난 입력일 여러 날을 한 번에 받아 ../seoji-content/content/ 에 CSV 로 쓴다. 커밋은 그 worktree 에서 직접 한다.
  *
  *   node scripts/backfill.mjs 20260731 20261028
  *

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * 시작일부터 과거로 페이지를 넘기며 API 가 허용하는 데까지 날짜별 CSV 를 content/ 에 쓴다. 커밋은 직접 한다.
+ * 시작일부터 과거로 페이지를 넘기며 API 가 허용하는 데까지 날짜별 CSV 를 ../seoji-content/content/ 에 쓴다. 커밋은 그 worktree 에서 직접 한다.
  *
  *   node scripts/archive.mjs 20260730            # 시작 페이지는 이진 탐색으로 찾는다
  *   node scripts/archive.mjs 20260730 --page 104 # 시작 페이지를 직접 준다 (이어 받기)
+ *   node scripts/archive.mjs 20231231 --until 20200101 # 이 날짜까지 받고 멈춘다
  *
  * 입력일 내림차순이라 어떤 날짜보다 이전 입력일이 나오면 그 날짜는 다 받은 것으로 보고 파일을 쓴다.
  * 한도 초과·요청 실패·순서가 어긋난 응답에서 멈추고, 그때 받던 날짜는 다 받았다고 볼 수 없어 버린다.
@@ -13,8 +14,11 @@ import { fetchPage, PAGE_SIZE, sleep, writeDay } from "./nl.mjs";
 import { splitAuthor } from "../src/collect.js";
 
 const START = process.argv[2];
-if (!/^\d{8}$/.test(START ?? "")) throw new Error("사용법: node scripts/archive.mjs <시작 yyyymmdd> [--page N]");
+if (!/^\d{8}$/.test(START ?? "")) throw new Error("사용법: node scripts/archive.mjs <시작 yyyymmdd> [--page N] [--until yyyymmdd]");
 const pageArg = process.argv.indexOf("--page");
+const untilArg = process.argv.indexOf("--until");
+const UNTIL = untilArg > 0 ? process.argv[untilArg + 1] : "";
+if (untilArg > 0 && !/^\d{8}$/.test(UNTIL ?? "")) throw new Error("--until 은 yyyymmdd");
 const dateOf = (d) => String(d?.INPUT_DATE ?? "").trim();
 const lastDate = (docs) => docs.map(dateOf).filter(Boolean).at(-1) ?? "";
 
@@ -66,6 +70,11 @@ for (; ; page++) {
     if (date !== current) {
       if (current && date > current) continue;  // 쪽 안에서 순서가 어긋난 행은 무시 (이미 쓴 날짜)
       if (current) { writeDay(current, [...found.values()]); written++; rows += found.size; console.log(`${current}: ${found.size}건`); }
+      if (date < UNTIL) {  // 더 이전 날짜가 나왔으니 UNTIL 까지는 다 받았다
+        current = null;
+        stopReason = `${UNTIL} 까지 받음`;
+        break;
+      }
       current = date;
       currentPage = page;
       found = new Map();
@@ -73,6 +82,7 @@ for (; ; page++) {
     const key = d.EA_ISBN || JSON.stringify(d);
     if (!found.has(key)) found.set(key, { ...d, ...splitAuthor(d.AUTHOR) });
   }
+  if (stopReason) break;
   prevLast = lastDate(docs) || prevLast;
   if (page % 50 === 0) console.log(`${page}쪽: ~${prevLast}`);
   if (docs.length < PAGE_SIZE) { reachedEnd = true; break; }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * content/ 의 CSV 를 지금 수집 코드의 형식(toCsv: 컬럼 순서·제외 컬럼)으로 다시 써서 push 한다.
+ * content 브랜치(../seoji-content worktree)의 CSV 를 지금 수집 코드의 형식(toCsv: 컬럼 순서·제외 컬럼)으로 다시 써서 push 한다.
  * 컬럼을 바꾼 뒤 기존 파일에 반영할 때 쓴다. Worker 는 실행 1회당 외부 요청 상한 때문에
  * 파일 수십 개를 고칠 수 없어 로컬에서 돌린다.
  *
@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { toCsv } from "../src/collect.js";
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const ROOT = join(import.meta.dirname, "../..");
+const ROOT = join(import.meta.dirname, "../../../seoji-content");
 const git = (...args) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
 
 // toCsv 가 쓰는 형식만 읽는다: BOM, 쉼표 구분, 큰따옴표 안의 "" 는 ", 따옴표 안 줄바꿈 허용
