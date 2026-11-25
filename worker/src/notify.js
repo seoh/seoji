@@ -41,23 +41,35 @@ function emailText(groups) {
   ].join("\n")).join("\n\n") + "\n";
 }
 
-// 설정이 없으면 건너뛴다. 외부 요청 1회만 쓰도록 다시 시도하지 않는다
-export async function notifyPublishers(env, target, docs) {
-  if (!env.RESEND_API_KEY || !env.NOTIFY_TO || !env.NOTIFY_FROM) return "알림 설정 없음";
-  const groups = matchPublishers(docs);
-  const count = groups.reduce((n, [, books]) => n + books.length, 0);
-  if (!count) return "알림 대상 없음";
+const configured = (env) => env.RESEND_API_KEY && env.NOTIFY_TO && env.NOTIFY_FROM;
+
+// 외부 요청 1회만 쓰도록 다시 시도하지 않는다
+async function sendMail(env, subject, text) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      from: env.NOTIFY_FROM,
-      to: [env.NOTIFY_TO],
-      subject: `[서지] ${target} 입력 관심 출판사 ${count}건`,
-      text: emailText(groups),
-    }),
+    body: JSON.stringify({ from: env.NOTIFY_FROM, to: [env.NOTIFY_TO], subject, text }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return `알림 ${count}건`;
+}
+
+// 설정이 없으면 건너뛴다. warning(API 오류로 건너뛴 레코드 등)이 있으면 관심 출판사 책이 없어도 보낸다.
+// 실행당 요청 50회 제한 때문에 경고를 따로 보내지 않고 한 통에 합친다
+export async function notifyPublishers(env, target, docs, warning = "") {
+  if (!configured(env)) return "알림 설정 없음";
+  const groups = matchPublishers(docs);
+  const count = groups.reduce((n, [, books]) => n + books.length, 0);
+  if (!count && !warning) return "알림 대상 없음";
+  const subject = `[서지] ${target} 입력 ` + [count && `관심 출판사 ${count}건`, warning && "API 오류"].filter(Boolean).join(", ");
+  const text = (warning ? `⚠ ${warning}\n\n` : "") + (count ? emailText(groups) : "관심 출판사 책 없음\n");
+  await sendMail(env, subject, text);
+  return `알림 ${count}건` + (warning ? ", 경고 포함" : "");
+}
+
+// 정기 실행이 실패했을 때. 메일까지 실패하면 로그만 남긴다
+export async function notifyFailure(env, target, message) {
+  if (!configured(env)) return;
+  await sendMail(env, `[서지] ${target} 수집 실패`, `${message}\n\n다시 받기: 수동 실행 ?date=${target}. 요청 상한 초과면 worker/scripts/local-run.mjs ${target}\n`)
+    .catch((e) => console.error(`실패 알림 발송 실패: ${e.message}`));
 }

@@ -1,6 +1,6 @@
 import { collect, kstTargetDate, parseCsv, toCsv } from "./collect.js";
 import { putFile, readFile } from "./github.js";
-import { notifyPublishers } from "./notify.js";
+import { notifyFailure, notifyPublishers } from "./notify.js";
 
 // 금·토 입력분은 다음 주 월요일에 일괄 등록되는 듯하다. 이틀 뒤(일·월 09:15)에는 거의 없다
 // (11-20 금: 11건 → 11-25 조회 1,673건 / 11-21 토: 0건 → 316건).
@@ -28,7 +28,8 @@ async function run(env, target, { notify = false, ebook, recheck = false } = {})
   console.log(summary);
   // 파일은 이미 저장됐다. 알림이 실패하면 실행 결과만 실패로 남는다
   if (!notify) return summary;
-  const result = await notifyPublishers(env, target, docs.filter((d) => !before.has(d.EA_ISBN)));
+  const warning = skipped ? `API 가 resultCode 105 를 내는 레코드 ${skipped}건을 건너뜀. Workers Logs 의 "건너뜀:" 줄에 위치가 있음` : "";
+  const result = await notifyPublishers(env, target, docs.filter((d) => !before.has(d.EA_ISBN)), warning);
   console.log(result);
   return `${summary}, ${result}`;
 }
@@ -38,8 +39,9 @@ export default {
     // 실패 사유를 로그에 남기고, 다시 던져 실행 결과가 실패로 기록되게 한다
     const recheck = event.cron in RECHECK_DAYS_AGO;
     const target = kstTargetDate(event.scheduledTime, RECHECK_DAYS_AGO[event.cron] ?? 2);
-    ctx.waitUntil(run(env, target, { notify: true, recheck }).catch((e) => {
+    ctx.waitUntil(run(env, target, { notify: true, recheck }).catch(async (e) => {
       console.error(e.message);
+      await notifyFailure(env, target, e.message);
       throw e;
     }));
   },
