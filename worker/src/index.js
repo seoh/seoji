@@ -4,11 +4,12 @@ import { notifyPublishers } from "./notify.js";
 
 async function run(env, target, { notify = false } = {}) {
   if (!env.NL_CERT_KEY) throw new Error("NL_CERT_KEY 시크릿이 없습니다");
-  const { docs, pages, requests } = await collect(env, target);
+  const { docs, pages, requests, skipped } = await collect(env, target);
   const [y, m, d] = [target.slice(0, 4), target.slice(4, 6), target.slice(6, 8)];
   const path = `content/${y}/${m}/${y}-${m}-${d}.csv`;
   await putFile(env, path, toCsv(docs), `data: ${target} 입력 도서 ${docs.length}건`);
-  const summary = `${target}: ${docs.length}건 → ${path} (${pages}쪽, 요청 ${requests}회)`;
+  const summary = `${target}: ${docs.length}건 → ${path} (${pages}쪽, 요청 ${requests}회` +
+    (skipped ? `, API 오류로 ${skipped}건 건너뜀)` : ")");
   console.log(summary);
   // 파일은 이미 저장됐다. 알림이 실패하면 실행 결과만 실패로 남는다
   if (!notify) return summary;

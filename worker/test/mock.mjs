@@ -3,6 +3,7 @@
  * 로컬 테스트용 가짜 국립중앙도서관 API + GitHub Contents API.
  *
  *   node test/mock.mjs            # 대상일 20261023 150건 + 다음 날·빈 입력일·이전 날 섞음
+ *                                 # + 응답에 섞이면 105 가 나는 전자책 1건 → 그 1건만 건너뛰어야 함
  *   MOCK_MODE=overflow node ...   # 대상일 30,000건 → 종이책·전자책 각각 11,000건 조회 한계에 걸려 실패, PUT 이 없어야 함
  *
  * PUT 받은 CSV 는 test/out/<path> 에 쓴다. GET /stats 로 요청 횟수를 본다.
@@ -57,6 +58,7 @@ if (MODE === "overflow") {
     list.push(book("20261023"));
   }
   for (let i = 0; i < 300; i++) list.push(book("20261022"));
+  list.splice(100, 0, { ...book("20261023"), EBOOK_YN: "Y", BROKEN: true });
 }
 
 const stats = { api: 0, ghGet: 0, ghPut: 0 };
@@ -85,6 +87,7 @@ createServer(async (req, res) => {
     const docs = list.filter((b) => !ebook || b.EBOOK_YN === ebook).slice((page - 1) * size, page * size);
     // 1쪽을 준 뒤 새 책이 입력된 것처럼 맨 앞에 끼워 넣어 목록을 한 칸 민다 → 2쪽 첫 책이 1쪽 마지막 책과 겹침
     if (MODE === "normal" && page === 1) list.unshift(book("20261024"));
+    if (docs.some((b) => b.BROKEN)) return json(res, 200, { resultCode: "105", resultMsg: "ERROR-API ERROR" });
     return json(res, 200, { TOTAL_COUNT: String(list.length), PAGE_NO: String(page), docs });
   }
 

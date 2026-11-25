@@ -74,40 +74,65 @@ export function toCsv(docs) {
 }
 
 // Worker 로그는 대시보드에 남으므로 에러 메시지에 URL·인증키를 넣지 않는다
-async function fetchPage(env, ebook, page, budget) {
+async function fetchPage(env, ebook, page, size, budget) {
   const url = new URL(env.NL_API_URL);
   url.search = new URLSearchParams({
-    cert_key: env.NL_CERT_KEY, result_style: "json", page_no: String(page), page_size: String(PAGE_SIZE),
+    cert_key: env.NL_CERT_KEY, result_style: "json", page_no: String(page), page_size: String(size),
     sort: "INPUT_DATE", order_by: "DESC", ebook_yn: ebook,
   });
+  const where = `ebook_yn=${ebook} offset ${(page - 1) * size}+${size}`;
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt++) {
     if (budget.used >= MAX_NL_REQUESTS) {
-      throw new Error(`요청 상한 ${MAX_NL_REQUESTS}회 초과 (ebook_yn=${ebook} ${page}쪽)`);
+      throw new Error(`요청 상한 ${MAX_NL_REQUESTS}회 초과 (${where})`);
     }
     budget.used++;
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (!Array.isArray(data.docs)) {
-        const brief = JSON.stringify(data).replaceAll(env.NL_CERT_KEY, "***").slice(0, 300);
-        throw new Error(`응답에 docs 가 없음: ${brief}`);
-      }
-      return data.docs;
+      if (Array.isArray(data.docs)) return data.docs;
+      const brief = JSON.stringify(data).replaceAll(env.NL_CERT_KEY, "***").slice(0, 300);
+      lastError = new Error(`${where} 응답에 docs 가 없음: ${brief}`);
+      lastError.apiCode = data.resultCode;
+      if (data.resultCode === "105") break;  // 같은 구간은 다시 요청해도 105. 재시도로 요청을 쓰지 않는다
     } catch (e) {
-      lastError = e;
+      lastError = new Error(`${where} 요청 실패: ${e.message}`);
       if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 5_000));
     }
   }
-  throw new Error(`ebook_yn=${ebook} ${page}쪽 요청 실패: ${lastError.message}`);
+  throw lastError;
+}
+
+// 특정 레코드가 든 구간은 쪽 크기와 상관없이 105 가 난다 (2026-11-25 전자책 offset 6,000~6,099).
+// 그 구간을 1/5 크기 쪽으로 나눠 다시 받고, 1건까지 좁혀도 실패하면 그 레코드만 건너뛴다.
+// 500건 구간에서 1건을 찾는 데 요청 약 19회
+async function fetchRange(env, ebook, offset, size, budget) {
+  try {
+    return { docs: await fetchPage(env, ebook, offset / size + 1, size, budget), skipped: 0 };
+  } catch (e) {
+    if (e.apiCode !== "105") throw e;
+    if (size === 1) {
+      console.log(`건너뜀: ${e.message}`);
+      return { docs: [], skipped: 1 };
+    }
+    const part = size % 5 === 0 ? size / 5 : 1;
+    const result = { docs: [], skipped: 0 };
+    for (let o = offset; o < offset + size; o += part) {
+      const r = await fetchRange(env, ebook, o, part, budget);
+      result.docs.push(...r.docs);
+      result.skipped += r.skipped;
+      if (r.docs.length + r.skipped < part) break;  // 목록 끝
+    }
+    return result;
+  }
 }
 
 export async function collect(env, target) {
   // 수집 중 새 책이 입력되면 페이지가 밀려 같은 책이 두 번 나올 수 있어 ISBN 으로 중복을 거른다
   const found = new Map();
   const budget = { used: 0 };
-  let pages = 0;
+  let pages = 0, skipped = 0;
   for (const ebook of ["N", "Y"]) {
     let reachedOlder = false;
     let page = 0;
@@ -115,7 +140,9 @@ export async function collect(env, target) {
       if (page * PAGE_SIZE >= MAX_OFFSET) {
         throw new Error(`API 는 앞 ${MAX_OFFSET}건까지만 조회돼 ebook_yn=${ebook} 에서 ${target} 입력분 끝까지 닿지 못함`);
       }
-      const docs = await fetchPage(env, ebook, ++page, budget);
+      const r = await fetchRange(env, ebook, page++ * PAGE_SIZE, PAGE_SIZE, budget);
+      const docs = r.docs;
+      skipped += r.skipped;
       for (const d of docs) {
         const date = String(d.INPUT_DATE ?? "").trim();
         if (date === target) {
@@ -127,9 +154,9 @@ export async function collect(env, target) {
           reachedOlder = true;  // 빈 입력일은 정렬 위치를 알 수 없어 멈춤 조건으로 쓰지 않는다
         }
       }
-      if (docs.length < PAGE_SIZE) break;  // 마지막 쪽
+      if (docs.length + r.skipped < PAGE_SIZE) break;  // 마지막 쪽
     }
     pages += page;
   }
-  return { docs: [...found.values()], pages, requests: budget.used };
+  return { docs: [...found.values()], pages, requests: budget.used, skipped };
 }
