@@ -1,8 +1,9 @@
 /**
  * 국립중앙도서관 ISBN 서지정보 API에서 특정 날짜에 입력(INPUT_DATE)된 책만 모아 CSV 로 만든다.
  *
- * API 에 입력일 필터가 없으므로 입력일 내림차순으로 페이지를 넘기며 대상 날짜를 모으고,
- * 대상 날짜보다 이전 입력일이 나오면 멈춘다.
+ * API 에 입력일 필터가 없으므로 입력일 내림차순 목록에서 대상 날짜가 시작되는 쪽을 이분 탐색으로 찾고,
+ * 거기서부터 페이지를 넘기며 모으다가 대상 날짜보다 이전 입력일이 나오면 멈춘다.
+ * (1쪽부터 넘기면 대상 이후 입력분만으로 요청 상한을 넘는다: 11-10·11-17 분이 48쪽에서 실패)
  */
 const PAGE_SIZE = 100;
 // Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회와 알림 1회를 남긴다
@@ -98,14 +99,43 @@ async function fetchPage(env, page, budget) {
   throw new Error(`${page}쪽 요청 실패: ${lastError.message}`);
 }
 
+// 쪽의 입력일 중 가장 이른 값. 빈 입력일은 정렬 위치를 알 수 없어 뺀다
+function oldestDate(docs) {
+  const dates = docs.map((d) => String(d.INPUT_DATE ?? "").trim()).filter(Boolean);
+  return dates.length ? dates[dates.length - 1] : undefined;
+}
+
+// 대상 날짜가 처음 나올 수 있는 쪽: 가장 이른 입력일이 대상 이하인 첫 쪽.
+// 1, 2, 4, 8… 쪽으로 범위를 잡은 뒤 이분 탐색한다. 대상이 300쪽 뒤에 있어도 요청 약 17회
+async function findStartPage(env, target, budget, cache) {
+  const reached = async (page) => {
+    const docs = await fetchPage(env, page, budget);
+    cache.set(page, docs);
+    const oldest = oldestDate(docs);
+    return docs.length === 0 || (oldest !== undefined && oldest <= target);
+  };
+  let before = 0, at = 1;  // before 쪽은 전부 대상보다 최근, at 쪽은 대상 이하에 닿음
+  while (!(await reached(at))) [before, at] = [at, at * 2];
+  while (at - before > 1) {
+    const mid = Math.floor((before + at) / 2);
+    if (await reached(mid)) at = mid;
+    else before = mid;
+  }
+  return at;
+}
+
 export async function collect(env, target) {
-  // 수집 중 새 책이 입력되면 페이지가 밀려 같은 책이 두 번 나올 수 있어 ISBN 으로 중복을 거른다
+  // 수집 중 새 책이 입력되면 페이지가 밀려 같은 책이 두 번 나올 수 있어 ISBN 으로 중복을 거른다.
+  // 밀리는 방향은 뒤쪽이라 탐색으로 찾은 시작 쪽 앞에서 대상 날짜 책을 놓치지 않는다
   const found = new Map();
   const budget = { used: 0 };
+  const cache = new Map();
+  const start = await findStartPage(env, target, budget, cache);
   let reachedOlder = false;
-  let page = 0;
+  let page = start - 1;
   while (!reachedOlder) {
-    const docs = await fetchPage(env, ++page, budget);
+    page++;
+    const docs = cache.get(page) ?? await fetchPage(env, page, budget);
     for (const d of docs) {
       const date = String(d.INPUT_DATE ?? "").trim();
       if (date === target) {
@@ -119,5 +149,5 @@ export async function collect(env, target) {
     }
     if (docs.length < PAGE_SIZE) break;  // 마지막 쪽
   }
-  return { docs: [...found.values()], pages: page, requests: budget.used };
+  return { docs: [...found.values()], pages: `${start}~${page}`, requests: budget.used };
 }
