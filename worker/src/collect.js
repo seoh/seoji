@@ -85,8 +85,10 @@ async function fetchPage(env, ebook, page, size, budget) {
   const where = `ebook_yn=${ebook} offset ${(page - 1) * size}+${size}`;
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    if (budget.used >= MAX_NL_REQUESTS) {
-      throw new Error(`요청 상한 ${MAX_NL_REQUESTS}회 초과 (${where})`);
+    // 로컬 실행(scripts/local-run.mjs)은 Worker 제한이 없어 env 로 상한을 올린다
+    const max = Number(env.MAX_NL_REQUESTS) || MAX_NL_REQUESTS;
+    if (budget.used >= max) {
+      throw new Error(`요청 상한 ${max}회 초과 (${where})`);
     }
     budget.used++;
     try {
