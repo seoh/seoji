@@ -4,9 +4,10 @@
  * API 에 입력일 필터가 없으므로 입력일 내림차순으로 페이지를 넘기며 대상 날짜를 모으고,
  * 대상 날짜보다 이전 입력일이 나오면 멈춘다.
  *
- * API 는 앞 11,000건까지만 조회된다(그 뒤 쪽은 resultCode 105). 하루 약 2,000건이라 평일 5일 정도까지만 닿는다
+ * API 는 조건마다 앞 11,000건까지만 조회된다(그 뒤 쪽은 resultCode 105). 그래서 종이책·전자책(ebook_yn N·Y,
+ * 합치면 전체와 같음)을 따로 넘긴다. 2026-11-25 기준 앞 11,000건 끝이 종이책 11-09, 전자책 11-12
  */
-// 쪽당 건수 상한은 문서상 1,000 미만. 500 이면 11,000건이 22쪽이라 요청 상한 안에 든다
+// 쪽당 건수 상한은 문서상 1,000 미만. 500 이면 11,000건이 22쪽, 종이책·전자책 합쳐 44쪽이라 요청 상한 안에 든다
 const PAGE_SIZE = 500;
 const MAX_OFFSET = 11_000;
 // Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회와 알림 1회를 남긴다
@@ -73,16 +74,16 @@ export function toCsv(docs) {
 }
 
 // Worker 로그는 대시보드에 남으므로 에러 메시지에 URL·인증키를 넣지 않는다
-async function fetchPage(env, page, budget) {
+async function fetchPage(env, ebook, page, budget) {
   const url = new URL(env.NL_API_URL);
   url.search = new URLSearchParams({
     cert_key: env.NL_CERT_KEY, result_style: "json", page_no: String(page), page_size: String(PAGE_SIZE),
-    sort: "INPUT_DATE", order_by: "DESC",
+    sort: "INPUT_DATE", order_by: "DESC", ebook_yn: ebook,
   });
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt++) {
     if (budget.used >= MAX_NL_REQUESTS) {
-      throw new Error(`요청 상한 ${MAX_NL_REQUESTS}회 초과 (${page}쪽)`);
+      throw new Error(`요청 상한 ${MAX_NL_REQUESTS}회 초과 (ebook_yn=${ebook} ${page}쪽)`);
     }
     budget.used++;
     try {
@@ -99,32 +100,36 @@ async function fetchPage(env, page, budget) {
       if (attempt < 3) await new Promise((r) => setTimeout(r, attempt * 5_000));
     }
   }
-  throw new Error(`${page}쪽 요청 실패: ${lastError.message}`);
+  throw new Error(`ebook_yn=${ebook} ${page}쪽 요청 실패: ${lastError.message}`);
 }
 
 export async function collect(env, target) {
   // 수집 중 새 책이 입력되면 페이지가 밀려 같은 책이 두 번 나올 수 있어 ISBN 으로 중복을 거른다
   const found = new Map();
   const budget = { used: 0 };
-  let reachedOlder = false;
-  let page = 0;
-  while (!reachedOlder) {
-    if (page * PAGE_SIZE >= MAX_OFFSET) {
-      throw new Error(`API 는 앞 ${MAX_OFFSET}건까지만 조회돼 ${target} 입력분 끝까지 닿지 못함 (${found.size}건까지 찾음)`);
-    }
-    const docs = await fetchPage(env, ++page, budget);
-    for (const d of docs) {
-      const date = String(d.INPUT_DATE ?? "").trim();
-      if (date === target) {
-        const key = d.EA_ISBN || JSON.stringify(d);
-        if (!found.has(key)) {
-          found.set(key, { ...d, ...splitAuthor(d.AUTHOR) });
-        }
-      } else if (date && date < target) {
-        reachedOlder = true;  // 빈 입력일은 정렬 위치를 알 수 없어 멈춤 조건으로 쓰지 않는다
+  let pages = 0;
+  for (const ebook of ["N", "Y"]) {
+    let reachedOlder = false;
+    let page = 0;
+    while (!reachedOlder) {
+      if (page * PAGE_SIZE >= MAX_OFFSET) {
+        throw new Error(`API 는 앞 ${MAX_OFFSET}건까지만 조회돼 ebook_yn=${ebook} 에서 ${target} 입력분 끝까지 닿지 못함`);
       }
+      const docs = await fetchPage(env, ebook, ++page, budget);
+      for (const d of docs) {
+        const date = String(d.INPUT_DATE ?? "").trim();
+        if (date === target) {
+          const key = d.EA_ISBN || JSON.stringify(d);
+          if (!found.has(key)) {
+            found.set(key, { ...d, ...splitAuthor(d.AUTHOR) });
+          }
+        } else if (date && date < target) {
+          reachedOlder = true;  // 빈 입력일은 정렬 위치를 알 수 없어 멈춤 조건으로 쓰지 않는다
+        }
+      }
+      if (docs.length < PAGE_SIZE) break;  // 마지막 쪽
     }
-    if (docs.length < PAGE_SIZE) break;  // 마지막 쪽
+    pages += page;
   }
-  return { docs: [...found.values()], pages: page, requests: budget.used };
+  return { docs: [...found.values()], pages, requests: budget.used };
 }

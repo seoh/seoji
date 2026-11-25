@@ -3,7 +3,7 @@
  * 로컬 테스트용 가짜 국립중앙도서관 API + GitHub Contents API.
  *
  *   node test/mock.mjs            # 대상일 20261023 150건 + 다음 날·빈 입력일·이전 날 섞음
- *   MOCK_MODE=overflow node ...   # 대상일 12,000건 → 11,000건 조회 한계에 걸려 실패, PUT 이 없어야 함
+ *   MOCK_MODE=overflow node ...   # 대상일 30,000건 → 종이책·전자책 각각 11,000건 조회 한계에 걸려 실패, PUT 이 없어야 함
  *
  * PUT 받은 CSV 는 test/out/<path> 에 쓴다. GET /stats 로 요청 횟수를 본다.
  */
@@ -34,7 +34,8 @@ const book = (date) => {
     EA_ISBN: String(9790000000000 + n),
     PRE_PRICE: "15000",
     PAGE: "320",
-    FORM: "종이책",
+    FORM: n % 3 === 0 ? "전자책" : "종이책",
+    EBOOK_YN: n % 3 === 0 ? "Y" : "N",
     PUBLISH_PREDATE: "20261101",
     INPUT_DATE: date,
     EA_ADD_CODE: ["03810", "05320", "79990", "", "2381"][n % 5],  // 마지막 셋: 표에 없는 값, 빈 값, 자릿수 오류
@@ -48,7 +49,7 @@ const book = (date) => {
 // 입력일 내림차순 목록
 let list = [];
 if (MODE === "overflow") {
-  for (let i = 0; i < 12000; i++) list.push(book("20261023"));
+  for (let i = 0; i < 30000; i++) list.push(book("20261023"));
 } else {
   for (let i = 0; i < 30; i++) list.push(book("20261024"));
   for (let i = 0; i < 150; i++) {
@@ -80,7 +81,8 @@ createServer(async (req, res) => {
     const size = Number(url.searchParams.get("page_size"));
     // 실제 API 처럼 앞 11,000건 뒤는 에러
     if ((page - 1) * size >= 11000) return json(res, 200, { resultCode: "105", resultMsg: "ERROR-API ERROR" });
-    const docs = list.slice((page - 1) * size, page * size);
+    const ebook = url.searchParams.get("ebook_yn");
+    const docs = list.filter((b) => !ebook || b.EBOOK_YN === ebook).slice((page - 1) * size, page * size);
     // 1쪽을 준 뒤 새 책이 입력된 것처럼 맨 앞에 끼워 넣어 목록을 한 칸 민다 → 2쪽 첫 책이 1쪽 마지막 책과 겹침
     if (MODE === "normal" && page === 1) list.unshift(book("20261024"));
     return json(res, 200, { TOTAL_COUNT: String(list.length), PAGE_NO: String(page), docs });
