@@ -2,9 +2,11 @@ import { collect, kstTargetDate, parseCsv, toCsv } from "./collect.js";
 import { putFile, readFile } from "./github.js";
 import { notifyPublishers } from "./notify.js";
 
-// 토요일 입력분은 이틀 뒤(월 09:15)에도 거의 없다 (11-21 분: 0건 → 11-25 재수집 316건).
-// 수요일 09:45 KST 에 나흘 전 토요일분을 다시 받는다. wrangler.toml 의 crons 와 같아야 한다
-const SATURDAY_RECHECK_CRON = "45 0 * * 3";
+// 금·토 입력분은 다음 주 월요일에 일괄 등록되는 듯하다. 이틀 뒤(일·월 09:15)에는 거의 없다
+// (11-20 금: 11건 → 11-25 조회 1,673건 / 11-21 토: 0건 → 316건).
+// 수요일에 다시 받는다: 09:45 KST 토요일분(나흘 전), 09:50 KST 금요일분(닷새 전).
+// 실행당 요청 50회 제한이 있어 cron 을 나눈다. wrangler.toml 의 crons 와 같아야 한다
+const RECHECK_DAYS_AGO = { "45 0 * * 3": 4, "50 0 * * 3": 5 };
 
 // recheck: 이미 받은 날짜를 다시 받는 실행. 알림은 기존 파일에 없던 책만 보낸다
 async function run(env, target, { notify = false, ebook, recheck = false } = {}) {
@@ -34,8 +36,8 @@ async function run(env, target, { notify = false, ebook, recheck = false } = {})
 export default {
   async scheduled(event, env, ctx) {
     // 실패 사유를 로그에 남기고, 다시 던져 실행 결과가 실패로 기록되게 한다
-    const recheck = event.cron === SATURDAY_RECHECK_CRON;
-    const target = kstTargetDate(event.scheduledTime, recheck ? 4 : 2);
+    const recheck = event.cron in RECHECK_DAYS_AGO;
+    const target = kstTargetDate(event.scheduledTime, RECHECK_DAYS_AGO[event.cron] ?? 2);
     ctx.waitUntil(run(env, target, { notify: true, recheck }).catch((e) => {
       console.error(e.message);
       throw e;
