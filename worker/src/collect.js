@@ -7,8 +7,10 @@
  * API 는 조건마다 앞 11,000건까지만 조회된다(그 뒤 쪽은 resultCode 105). 그래서 종이책·전자책(ebook_yn N·Y,
  * 합치면 전체와 같음)을 따로 넘긴다. 2026-11-25 기준 앞 11,000건 끝이 종이책 11-09, 전자책 11-12
  */
-// 쪽당 건수 상한은 문서상 1,000 미만. 500 이면 11,000건이 22쪽, 종이책·전자책 합쳐 44쪽이라 요청 상한 안에 든다
-const PAGE_SIZE = 500;
+// 쪽당 건수 상한은 문서상 1,000 미만이지만 1,000 도 받아진다 (5,000 은 013 에러).
+// 1,000 이면 11,000건이 11쪽, 종이책·전자책 합쳐 22쪽. 105 구간 나누기(약 23회)를 더해도 요청 상한 안에 든다
+// (500 일 때 11-17 분 재수집이 105 구간을 좁히다 47회를 넘었다)
+const PAGE_SIZE = 1000;
 const MAX_OFFSET = 11_000;
 // Free 플랜은 실행 1회당 외부 요청 50회. 재시도도 1회로 센다. GitHub GET+PUT 2회와 알림 1회를 남긴다
 export const MAX_NL_REQUESTS = 47;
@@ -106,7 +108,7 @@ async function fetchPage(env, ebook, page, size, budget) {
 
 // 특정 레코드가 든 구간은 쪽 크기와 상관없이 105 가 난다 (2026-11-25 전자책 offset 6,000~6,099).
 // 그 구간을 1/5 크기 쪽으로 나눠 다시 받고, 1건까지 좁혀도 실패하면 그 레코드만 건너뛴다.
-// 500건 구간에서 1건을 찾는 데 요청 약 19회
+// 1,000건 구간에서 1건을 찾는 데 요청 약 23회 (1,000 → 200 → 40 → 8 → 1)
 async function fetchRange(env, ebook, offset, size, budget) {
   try {
     return { docs: await fetchPage(env, ebook, offset / size + 1, size, budget), skipped: 0 };
