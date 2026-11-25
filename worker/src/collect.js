@@ -130,12 +130,34 @@ async function fetchRange(env, ebook, offset, size, budget) {
   }
 }
 
-export async function collect(env, target) {
+// toCsv 로 쓴 파일을 다시 읽는다. 따옴표 안의 쉼표·줄바꿈을 처리하는 최소 파서
+export function parseCsv(text) {
+  const rows = [];
+  let row = [], field = "", quoted = false;
+  text = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else field += c;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  const [header = [], ...body] = rows;
+  return body.map((r) => Object.fromEntries(header.map((h, i) => [h, r[i] ?? ""])));
+}
+
+// ebooks 로 종이책(N)·전자책(Y) 중 한쪽만 받을 수 있다. 105 구간이 여러 개라 한 번에 요청 상한을 넘을 때 쓴다
+export async function collect(env, target, ebooks = ["N", "Y"]) {
   // 수집 중 새 책이 입력되면 페이지가 밀려 같은 책이 두 번 나올 수 있어 ISBN 으로 중복을 거른다
   const found = new Map();
   const budget = { used: 0 };
   let pages = 0, skipped = 0;
-  for (const ebook of ["N", "Y"]) {
+  for (const ebook of ebooks) {
     let reachedOlder = false;
     let page = 0;
     while (!reachedOlder) {

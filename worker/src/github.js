@@ -9,15 +9,32 @@ function toBase64(text) {
   return btoa(bin);
 }
 
+function contentsApi(env, path) {
+  return {
+    url: `${env.GITHUB_API_URL}/repos/${env.GITHUB_REPO}/contents/${path}`,
+    branch: env.GITHUB_BRANCH || "main",
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "seoji-archive",  // GitHub API 는 User-Agent 필수
+    },
+  };
+}
+
+// 파일 내용. 없으면 빈 문자열. 1MB 가 넘는 파일은 JSON 응답에 content 가 비어 있어 raw 로 받는다
+export async function readFile(env, path) {
+  const { url, branch, headers } = contentsApi(env, path);
+  const res = await fetch(`${url}?ref=${encodeURIComponent(branch)}`, {
+    headers: { ...headers, Accept: "application/vnd.github.raw+json" },
+  });
+  if (res.status === 404) return "";
+  if (!res.ok) throw new Error(`GitHub GET ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.text();
+}
+
 // 같은 경로가 있으면 sha 를 받아 덮어쓴다 (재실행 대비)
 export async function putFile(env, path, text, message) {
-  const url = `${env.GITHUB_API_URL}/repos/${env.GITHUB_REPO}/contents/${path}`;
-  const branch = env.GITHUB_BRANCH || "main";
-  const headers = {
-    Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-    Accept: "application/vnd.github+json",
-    "User-Agent": "seoji-archive",  // GitHub API 는 User-Agent 필수
-  };
+  const { url, branch, headers } = contentsApi(env, path);
 
   const got = await fetch(`${url}?ref=${encodeURIComponent(branch)}`, { headers });
   let sha;

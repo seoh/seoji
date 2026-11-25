@@ -9,7 +9,7 @@
  * PUT 받은 CSV 는 test/out/<path> 에 쓴다. GET /stats 로 요청 횟수를 본다.
  */
 import { createServer } from "node:http";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 const PORT = 8790;
@@ -99,7 +99,12 @@ createServer(async (req, res) => {
     }
     if (req.method === "GET") {
       stats.ghGet++;
-      return files.has(path) ? json(res, 200, { sha: files.get(path) }) : json(res, 404, { message: "Not Found" });
+      if (!files.has(path)) return json(res, 404, { message: "Not Found" });
+      if (req.headers.accept === "application/vnd.github.raw+json") {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+        return res.end(readFileSync(join(OUT, path)));
+      }
+      return json(res, 200, { sha: files.get(path) });
     }
     if (req.method === "PUT") {
       stats.ghPut++;
